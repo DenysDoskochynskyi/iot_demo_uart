@@ -1,0 +1,1 @@
+/Users/denys/Documents/iot_demo_uart/build/app/intermediates/cxx/Debug/5i722e6k/obj/x86_64
