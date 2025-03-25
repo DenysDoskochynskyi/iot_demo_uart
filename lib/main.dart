@@ -1,10 +1,8 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:iot_demo_uart/feature/cubit/usb_cubit.dart';
 import 'package:iot_demo_uart/manager/usb_manger/usb_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:usb_serial/usb_serial.dart';
 
 void main() {
   runApp(MultiProvider(
@@ -15,44 +13,19 @@ void main() {
           create: (context) =>
               UsbManager(Provider.of<BaseUsbService>(context, listen: false))),
     ],
-    child: MyApp(),
+    child: BlocProvider(
+      create: (context) => UsbCubit(context.read<UsbManager>()),
+      child: const MyApp(),
+    ),
   ));
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  UsbPort? _port;
-  StreamSubscription<Uint8List>? _subscription;
-  List<Widget> _receivedData = [];
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  Future<void> _disconnect() async {
-    await _subscription?.cancel();
-    await _port?.close();
-    setState(() {
-      _port = null;
-    });
-  }
-
-  Future<void> _clearList() async {
-    setState(() {
-      _receivedData = [];
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final manager = Provider.of<UsbManager>(context);
+    final cubit = Provider.of<UsbCubit>(context);
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(title: const Text("Flutter USB Serial UART")),
@@ -62,44 +35,42 @@ class _MyAppState extends State<MyApp> {
             children: [
               SizedBox(
                 height: MediaQuery.sizeOf(context).height * 0.2,
-                child: StreamBuilder<List<UsbDevice>>(
-                    stream: manager.device,
-                    builder: (context, snapshot) {
-                      final data = snapshot.data ?? [];
+                child:
+                    BlocBuilder<UsbCubit, UsbState>(builder: (context, state) {
+                  final data = state.devices;
 
-                      return ListView(
-                        children: data
-                            .map(
-                              (e) => Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8),
-                                child: Text(
-                                    'Device name: ${e.deviceName} \nID: ${e.deviceName}'),
-                              ),
-                            )
-                            .toList(),
-                      );
-                    }),
+                  return ListView(
+                    children: data
+                        .map(
+                          (e) => Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Text(
+                                'Device name: ${e.deviceName} \nID: ${e.deviceName}'),
+                          ),
+                        )
+                        .toList(),
+                  );
+                }),
               ),
               ElevatedButton(
-                onPressed: manager.selectDevice,
+                onPressed: cubit.connectToLatestDevice,
                 child: const Text("Підключитися до першого пристрою"),
               ),
               ElevatedButton(
-                onPressed: manager.refreshDeviceList,
+                onPressed: cubit.refreshDeviceList,
                 child: const Text("Оновити список девайсів"),
               ),
               ElevatedButton(
-                onPressed: manager.dispose,
+                onPressed: cubit.disconnect,
                 child: const Text("Відключитися"),
               ),
               ElevatedButton(
-                onPressed: _clearList,
+                onPressed: cubit.clearData,
                 child: const Text("Очистити термінал"),
               ),
               TextField(
                 decoration: const InputDecoration(labelText: "Відправити дані"),
-                onSubmitted: manager.sendData,
+                onSubmitted: cubit.sendData,
               ),
               const SizedBox(height: 20),
               const Text("Отримані дані:"),
@@ -107,19 +78,28 @@ class _MyAppState extends State<MyApp> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   ElevatedButton(
-                    onPressed: () => manager.sendData('ON'),
+                    onPressed: () => cubit.sendData('ON'),
                     child: const Text("On"),
                   ),
                   const SizedBox(width: 20),
                   ElevatedButton(
-                    onPressed: () => manager.sendData('OFF'),
+                    onPressed: () => cubit.sendData('OFF'),
                     child: const Text("Off"),
                   ),
                 ],
               ),
-              Expanded(
-                  child: SingleChildScrollView(
-                      child: Column(children: _receivedData))),
+              Expanded(child:
+                  SingleChildScrollView(child: BlocBuilder<UsbCubit, UsbState>(
+                builder: (context, state) {
+                  return Column(children: [
+                    for (final val in state.data)
+                      Text(
+                        'Data from USB: $val',
+                        style: const TextStyle(color: Colors.red),
+                      )
+                  ]);
+                },
+              ))),
             ],
           ),
         ),

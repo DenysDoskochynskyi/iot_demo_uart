@@ -56,16 +56,17 @@ class UsbManager {
   final _cachedDevice = BehaviorSubject<List<UsbDevice>>.seeded([]);
   final _cachedPort = BehaviorSubject<UsbPort?>();
   final _cachedRate = BehaviorSubject<int>.seeded(115200);
+
   Stream<List<UsbDevice>> get device => _cachedDevice.stream;
 
-  Stream<UsbPort?> get port => _cachedPort.stream;
+  UsbPort? get port => _cachedPort.valueOrNull;
 
   Future<void> refreshDeviceList() async {
     final data = await service.getDeviceList();
     _cachedDevice.add(data);
   }
 
-  Future<void> selectDevice() async {
+  Future<UsbPort?> selectDevice() async {
     final data = _cachedDevice.value;
     if (data.isEmpty) await refreshDeviceList();
 
@@ -74,6 +75,7 @@ class UsbManager {
       rate: _cachedRate.value,
     );
     _cachedPort.add(port);
+    return port;
   }
 
   Future<void> sendData(String data) async {
