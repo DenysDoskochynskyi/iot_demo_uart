@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  mqtt_client:
   flutter_bloc:
   provider:
   rxdart:

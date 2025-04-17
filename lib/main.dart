@@ -1,10 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:iot_demo_uart/feature/cubit/usb_cubit.dart';
 import 'package:iot_demo_uart/manager/usb_manger/usb_manager.dart';
+import 'package:mqtt_client/mqtt_client.dart';
+import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:provider/provider.dart';
 
-void main() {
+void main() async {
+  final newclient = MQTTClientWrapper();
+  newclient.prepareMqttClient();
   runApp(MultiProvider(
     providers: [
       Provider<BaseUsbService>(create: (context) => UsbService()),
@@ -105,5 +111,82 @@ class MyApp extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+enum MqttCurrentConnectionState {
+  IDLE,
+  CONNECTING,
+  CONNECTED,
+  DISCONNECTED,
+  ERROR_WHEN_CONNECTING
+}
+
+enum MqttSubscriptionState { IDLE, SUBSCRIBED }
+
+class MQTTClientWrapper {
+  late MqttServerClient client;
+
+  MqttCurrentConnectionState connectionState = MqttCurrentConnectionState.IDLE;
+  MqttSubscriptionState subscriptionState = MqttSubscriptionState.IDLE;
+
+  void prepareMqttClient() async {
+    _setupMqttClient();
+    await _connectClient();
+    _subscribeToTopic('sensor/temperature');
+  }
+
+  Future<void> _connectClient() async {
+    try {
+      connectionState = MqttCurrentConnectionState.CONNECTING;
+      await client.connect('CRED', 'PASS');
+    } on Exception catch (e) {
+      connectionState = MqttCurrentConnectionState.ERROR_WHEN_CONNECTING;
+      client.disconnect();
+    }
+
+    if (client.connectionStatus!.state == MqttConnectionState.connected) {
+      connectionState = MqttCurrentConnectionState.CONNECTED;
+    } else {
+      connectionState = MqttCurrentConnectionState.ERROR_WHEN_CONNECTING;
+      client.disconnect();
+    }
+  }
+
+  void _setupMqttClient() {
+    client = MqttServerClient.withPort('URL', 'dotem', 8883);
+    client.secure = true;
+    client.securityContext = SecurityContext.defaultContext;
+    client.keepAlivePeriod = 20;
+    client.onDisconnected = _onDisconnected;
+    client.onConnected = _onConnected;
+    client.onSubscribed = _onSubscribed;
+  }
+
+  void _subscribeToTopic(String topicName) {
+    client.subscribe(topicName, MqttQos.atMostOnce);
+
+    client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> c) {
+      final recMess = c[0].payload as MqttPublishMessage;
+      final payload =
+          MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
+
+      debugPrint('Received temperature: $payload');
+    });
+  }
+
+  void _onSubscribed(String topic) {
+    debugPrint('Subscription confirmed for topic $topic');
+    subscriptionState = MqttSubscriptionState.SUBSCRIBED;
+  }
+
+  void _onDisconnected() {
+    debugPrint('OnDisconnected client callback - Client disconnection');
+    connectionState = MqttCurrentConnectionState.DISCONNECTED;
+  }
+
+  void _onConnected() {
+    connectionState = MqttCurrentConnectionState.CONNECTED;
+    debugPrint('OnConnected client callback - Client connection was sucessful');
   }
 }
